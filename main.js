@@ -231,12 +231,16 @@ let priorBounds = null
 ipcMain.handle('expand-for-editor', () => {
   priorBounds = win.getBounds()
   win.setIgnoreMouseEvents(false)
-  // Use full physical screen bounds — ignore work area for the editor overlay
+  // 'screen-saver' level beats Roblox fullscreen on Windows
+  win.setAlwaysOnTop(true, 'screen-saver')
   const fb = screen.getPrimaryDisplay().bounds
   win.setBounds({ x: fb.x, y: fb.y, width: fb.width, height: fb.height })
+  win.showInactive()  // make sure it's visible without stealing Roblox focus
 })
 
 ipcMain.handle('collapse-from-editor', () => {
+  win.setAlwaysOnTop(true)  // drop back to normal always-on-top level
+  win.setIgnoreMouseEvents(false)
   win.setBounds(priorBounds || { x: screenW - PANEL_W, y: 0, width: PANEL_W, height: screenH })
   priorBounds = null
 })

@@ -1,5 +1,5 @@
 /* global require */
-const { ipcRenderer, desktopCapturer } = require('electron')
+const { ipcRenderer } = require('electron')
 const path = require('path')
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -35,6 +35,14 @@ async function init() {
   editorCanvas = document.getElementById('editor-canvas')
   editorCtx = editorCanvas.getContext('2d')
   bindEditorCanvas()
+
+  // Rescale canvas whenever the window/container resizes (e.g. after expand-for-editor)
+  const canvasWrap = document.getElementById('canvas-wrap')
+  new ResizeObserver(() => {
+    if (editorCanvas.width > 0 && !document.getElementById('editor-modal').classList.contains('hidden')) {
+      scaleCanvasToFit()
+    }
+  }).observe(canvasWrap)
 
   // Update edge handle visibility when panel slides in/out
   ipcRenderer.on('panel-state', (_, state) => {
@@ -165,7 +173,6 @@ async function toggleFavorite(id) {
 async function openEditor_fromShot(id) {
   const s = shots.find(x => x.id === id)
   if (!s) return
-  editingShotId = id
   const data = await ipcRenderer.invoke('read-image', s.filePath)
   if (data) openEditor(data, id)
 }
@@ -229,8 +236,8 @@ async function openEditor(dataUrl, shotId) {
     editorCanvas.height = img.naturalHeight
     editorCtx.drawImage(img, 0, 0)
     originalImageData = editorCtx.getImageData(0, 0, editorCanvas.width, editorCanvas.height)
-    scaleCanvasToFit()
     pushHistory()
+    // ResizeObserver fires once the window finishes expanding, then scales correctly
   }
   img.src = dataUrl
 }
@@ -698,8 +705,8 @@ function bindKeys() {
     }
 
     // Calculator keyboard support when calc is open and no modal active
-    if (cOpen && !noteOpen && !editorOpen && !viewerOpen &&
-        !document.getElementById('settings-modal').classList.contains('hidden') === false) {
+    const settingsOpen = !document.getElementById('settings-modal').classList.contains('hidden')
+    if (cOpen && !noteOpen && !editorOpen && !viewerOpen && !settingsOpen) {
       const k = e.key
       if (k >= '0' && k <= '9')  { cDigit(k); cRefresh(); return }
       if (k === '.')              { cDot(); cRefresh(); return }
