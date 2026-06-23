@@ -1,0 +1,12 @@
+{
+  "name": "side-notes",
+  "version": "1.0.0",
+  "description": "A sidebar app for notes and screenshots while gaming",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^34.0.0"
+  }
+}

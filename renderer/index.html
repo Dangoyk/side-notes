@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Side Notes</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Title bar (draggable region) -->
+  <div id="titlebar">
+    <span id="app-title">Side Notes <span id="version">v1.0.0</span></span>
+    <div id="win-controls">
+      <button id="btn-minimize" title="Minimize">&#8212;</button>
+      <button id="btn-close" title="Close">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div id="tabs">
+    <button class="tab active" data-tab="notes">Notes</button>
+    <button class="tab" data-tab="shots">Shots</button>
+  </div>
+
+  <!-- Notes tab -->
+  <div id="tab-notes" class="tab-pane active">
+    <div class="toolbar">
+      <button id="btn-new-note">+ New Note</button>
+      <span class="kbd-hint">Ctrl+N</span>
+    </div>
+    <div id="notes-list" class="scroll-area" tabindex="0"></div>
+  </div>
+
+  <!-- Screenshots tab -->
+  <div id="tab-shots" class="tab-pane">
+    <div class="toolbar">
+      <button id="btn-capture">Capture</button>
+      <span class="kbd-hint">Ctrl+Shift+S</span>
+    </div>
+    <div id="shots-list" class="scroll-area" tabindex="0"></div>
+  </div>
+
+  <!-- Note editor modal -->
+  <div id="note-modal" class="modal hidden">
+    <div class="note-modal-bar">
+      <input id="note-title-input" type="text" placeholder="Title..." maxlength="120" autocomplete="off">
+      <button id="btn-save-note" class="btn-accent">Save</button>
+      <button id="btn-cancel-note" class="btn-ghost">&#x2715;</button>
+    </div>
+    <textarea id="note-body-input" placeholder="Write your note here...&#10;&#10;Puzzle hints, coordinates, solutions — anything you need."></textarea>
+  </div>
+
+  <!-- Screenshot editor modal -->
+  <div id="editor-modal" class="modal hidden">
+    <div id="editor-bar">
+      <button class="tool active" data-tool="pen">Pen</button>
+      <button class="tool" data-tool="rect">Rect</button>
+      <button class="tool" data-tool="arrow">Arrow</button>
+      <button class="tool" data-tool="text">Text</button>
+      <button class="tool" data-tool="eraser">Erase</button>
+      <span class="bar-sep"></span>
+      <input type="color" id="color-picker" value="#ff3b3b" title="Color">
+      <input type="range" id="size-slider" min="1" max="20" value="3" title="Size">
+      <span class="bar-sep"></span>
+      <button id="btn-undo" title="Ctrl+Z">Undo</button>
+      <button id="btn-save-ss" class="btn-green" title="Ctrl+S">Save</button>
+      <button id="btn-cancel-editor" class="btn-ghost" title="Esc">&#x2715;</button>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="editor-canvas"></canvas>
+      <div id="text-overlay" class="hidden">
+        <input id="text-input" type="text" placeholder="Type then Enter...">
+      </div>
+    </div>
+  </div>
+
+  <!-- Image viewer modal -->
+  <div id="viewer-modal" class="modal hidden">
+    <div id="viewer-bar">
+      <button id="btn-edit-from-viewer" class="btn-accent">Edit</button>
+      <button id="btn-close-viewer" class="btn-ghost">&#x2715;</button>
+    </div>
+    <div id="viewer-wrap">
+      <img id="viewer-img" src="" alt="screenshot">
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
