@@ -440,6 +440,18 @@ body {
 }
 
 /* ── Edge handle (only shown when panel is hidden) ── */
+/* When hidden, transparent background + hide all content except the pill */
+body.panel-closed {
+  background: transparent !important;
+}
+body.panel-closed #titlebar,
+body.panel-closed #tabs,
+body.panel-closed #tab-notes,
+body.panel-closed #tab-shots,
+body.panel-closed #calc-panel {
+  display: none !important;
+}
+
 #edge-handle {
   display: none;
   position: fixed;
@@ -447,7 +459,7 @@ body {
   transform: translateY(-50%);
   width: 20px; height: 56px;
   background: var(--accent);
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px 0 0 6px;  /* rounded on game-side, flat on screen-edge */
   align-items: center;
   justify-content: center;
   font-size: 16px;

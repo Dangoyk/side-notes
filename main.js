@@ -5,7 +5,7 @@ const os   = require('os')
 const { exec } = require('child_process')
 
 const PANEL_W  = 320
-const STUB_W   = 24   // px that remain visible on the right edge when "hidden"
+const STUB_W   = 20   // matches pill width — only the pill sticks out
 
 let win
 let screenW, screenH
@@ -18,8 +18,8 @@ let hotkey        = 'F9'
 
 app.whenReady().then(() => {
   const display = screen.getPrimaryDisplay()
-  screenW = display.workAreaSize.width
-  screenH = display.workAreaSize.height
+  screenW = display.bounds.width   // physical screen edge, not work area
+  screenH = display.bounds.height
 
   loadConfig()
 
@@ -31,6 +31,7 @@ app.whenReady().then(() => {
     alwaysOnTop: true,
     frame: false,
     show: false,
+    transparent: true,        // lets background disappear when panel is hidden
     resizable: true,
     fullscreenable: false,
     minWidth: 240,
@@ -47,6 +48,7 @@ app.whenReady().then(() => {
   win.once('ready-to-show', () => {
     win.setPosition(screenW - STUB_W, 0)
     win.showInactive()
+    win.setIgnoreMouseEvents(true, { forward: true })  // click-through when hidden
   })
 
   win.webContents.once('did-finish-load', () => {
@@ -87,6 +89,8 @@ function slideIn() {
   isVisible = true
   sliding   = true
   clearSlide()
+  win.setIgnoreMouseEvents(false)
+  if (win.webContents) win.webContents.send('panel-state', 'open')  // show content before sliding
 
   const start  = screenW - STUB_W
   const target = screenW - PANEL_W
@@ -97,10 +101,7 @@ function slideIn() {
     let [x] = win.getPosition()
     x = Math.max(target, x - 22)
     win.setPosition(x, 0)
-    if (x <= target) {
-      clearSlide(); sliding = false
-      if (win && win.webContents) win.webContents.send('panel-state', 'open')
-    }
+    if (x <= target) { clearSlide(); sliding = false }
   }, 8)
 }
 
@@ -119,6 +120,7 @@ function slideOut() {
     win.setPosition(x, 0)
     if (x >= target) {
       clearSlide(); sliding = false
+      win.setIgnoreMouseEvents(true, { forward: true })  // click-through stub area
       if (win && win.webContents) win.webContents.send('panel-state', 'closed')
     }
   }, 8)
