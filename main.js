@@ -44,6 +44,9 @@ app.whenReady().then(() => {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   fs.mkdirSync(path.join(app.getPath('userData'), 'screenshots'), { recursive: true })
 
+  // Use screen-saver level so the panel beats Roblox fullscreen at all times
+  win.setAlwaysOnTop(true, 'screen-saver')
+
   win.once('ready-to-show', () => {
     win.setPosition(screenW - STUB_W, 0)
     win.showInactive()
@@ -226,23 +229,23 @@ ipcMain.handle('resume-hotkey', () => registerHotkey(hotkey))
 
 ipcMain.handle('set-interacting', (_, val) => { isInteracting = val })
 
-let priorBounds = null
-
 ipcMain.handle('expand-for-editor', () => {
-  priorBounds = win.getBounds()
+  // Cancel any in-progress slide before expanding
+  clearSlide()
+  sliding = false
   win.setIgnoreMouseEvents(false)
-  // 'screen-saver' level beats Roblox fullscreen on Windows
-  win.setAlwaysOnTop(true, 'screen-saver')
   const fb = screen.getPrimaryDisplay().bounds
   win.setBounds({ x: fb.x, y: fb.y, width: fb.width, height: fb.height })
-  win.showInactive()  // make sure it's visible without stealing Roblox focus
+  win.showInactive()
 })
 
 ipcMain.handle('collapse-from-editor', () => {
-  win.setAlwaysOnTop(true)  // drop back to normal always-on-top level
+  // Always restore to the exact fully-open panel position (never use a mid-slide position)
+  win.setBounds({ x: screenW - PANEL_W, y: 0, width: PANEL_W, height: screenH })
   win.setIgnoreMouseEvents(false)
-  win.setBounds(priorBounds || { x: screenW - PANEL_W, y: 0, width: PANEL_W, height: screenH })
-  priorBounds = null
+  // Lock the panel open so pollMouse doesn't immediately auto-hide it
+  isVisible = true
+  isLocked  = true
 })
 
 ipcMain.handle('minimize-win', () => win.minimize())
