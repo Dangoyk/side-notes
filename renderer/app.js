@@ -28,10 +28,17 @@ async function init() {
   renderShots()
   bindUI()
   bindKeys()
+  await loadHotkeyDisplay()
+  calcInit()
 
   editorCanvas = document.getElementById('editor-canvas')
   editorCtx = editorCanvas.getContext('2d')
   bindEditorCanvas()
+
+  // Update edge handle visibility when panel slides in/out
+  ipcRenderer.on('panel-state', (_, state) => {
+    document.body.classList.toggle('panel-closed', state === 'closed')
+  })
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -75,11 +82,13 @@ function openNoteModal(id) {
   document.getElementById('note-body-input').value  = n ? n.body  : ''
   document.getElementById('note-modal').classList.remove('hidden')
   document.getElementById('note-title-input').focus()
+  ipcRenderer.invoke('set-interacting', true)
 }
 
 function closeNoteModal() {
   editingNoteId = null
   document.getElementById('note-modal').classList.add('hidden')
+  ipcRenderer.invoke('set-interacting', false)
 }
 
 async function saveNote() {
@@ -130,20 +139,10 @@ function renderShots() {
 }
 
 async function captureScreen() {
-  await ipcRenderer.invoke('hide-win')
-  await sleep(350)
-
   try {
-    const pw = Math.round(window.screen.width  * window.devicePixelRatio)
-    const ph = Math.round(window.screen.height * window.devicePixelRatio)
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: pw, height: ph }
-    })
-    await ipcRenderer.invoke('show-win')
-    if (sources.length) openEditor(sources[0].thumbnail.toDataURL(), null)
+    const dataUrl = await ipcRenderer.invoke('capture-screen')
+    if (dataUrl) openEditor(dataUrl, null)
   } catch (err) {
-    await ipcRenderer.invoke('show-win')
     console.error('Capture failed:', err)
   }
 }
@@ -163,6 +162,7 @@ function openEditor(dataUrl, shotId) {
   originalImageData = null
 
   document.getElementById('editor-modal').classList.remove('hidden')
+  ipcRenderer.invoke('set-interacting', true)
 
   const img = new Image()
   img.onload = () => {
@@ -331,6 +331,7 @@ async function saveShot() {
 function closeEditor() {
   document.getElementById('editor-modal').classList.add('hidden')
   history = []; originalImageData = null; editingShotId = null
+  ipcRenderer.invoke('set-interacting', false)
 }
 
 // ── Viewer ─────────────────────────────────────────────────────────────────
@@ -342,11 +343,134 @@ async function openViewer(id) {
   if (!data) return
   document.getElementById('viewer-img').src = data
   document.getElementById('viewer-modal').classList.remove('hidden')
+  ipcRenderer.invoke('set-interacting', true)
 }
 
 function closeViewer() {
   document.getElementById('viewer-modal').classList.add('hidden')
   editingShotId = null
+  ipcRenderer.invoke('set-interacting', false)
+}
+
+// ── Calculator ─────────────────────────────────────────────────────────────
+let cVal   = '0'   // display value
+let cPrev  = null  // stored operand
+let cOp    = null  // pending operator
+let cFresh = false // next digit replaces display
+let cOpen  = false // calculator expanded
+
+function calcInit() {
+  document.getElementById('calc-toggle-btn').addEventListener('click', () => {
+    cOpen = !cOpen
+    document.getElementById('calc-body').classList.toggle('hidden', !cOpen)
+    document.getElementById('calc-arrow').innerHTML = cOpen ? '&#9660;' : '&#9650;'
+  })
+
+  document.getElementById('calc-btns').addEventListener('click', e => {
+    const btn = e.target.closest('.cb')
+    if (!btn) return
+    const { action, op, digit } = btn.dataset
+    if (action === 'digit')  cDigit(digit)
+    if (action === 'dot')    cDot()
+    if (action === 'op')     cOperator(op)
+    if (action === 'equals') cEquals()
+    if (action === 'clear')  cClear()
+    if (action === 'sign')   cSign()
+    if (action === 'pct')    cPercent()
+    cRefresh()
+  })
+}
+
+function cDigit(d) {
+  if (cFresh) { cVal = d === '0' ? '0' : d; cFresh = false }
+  else cVal = (cVal === '0') ? d : (cVal.length < 12 ? cVal + d : cVal)
+}
+function cDot() {
+  if (cFresh) { cVal = '0.'; cFresh = false; return }
+  if (!cVal.includes('.')) cVal += '.'
+}
+function cOperator(op) {
+  if (cOp && !cFresh) cEquals()
+  cPrev = parseFloat(cVal); cOp = op; cFresh = true
+}
+function cEquals() {
+  if (cOp === null || cPrev === null) return
+  const cur = parseFloat(cVal)
+  let r
+  if (cOp === '+') r = cPrev + cur
+  else if (cOp === '-') r = cPrev - cur
+  else if (cOp === '*') r = cPrev * cur
+  else if (cOp === '/') r = cur !== 0 ? cPrev / cur : 'Error'
+  else r = cur
+  document.getElementById('calc-expr').textContent =
+    `${cFmt(cPrev)} ${{'+':`+`,'-':`−`,'*':`×`,'/':`÷`}[cOp]} ${cFmt(cur)} =`
+  cVal = r === 'Error' ? 'Error' : cFmt(r)
+  cOp = null; cPrev = null; cFresh = true
+}
+function cClear() {
+  cVal = '0'; cPrev = null; cOp = null; cFresh = false
+  document.getElementById('calc-expr').textContent = ''
+}
+function cSign()    { if (cVal !== '0' && cVal !== 'Error') cVal = cVal.startsWith('-') ? cVal.slice(1) : '-' + cVal }
+function cPercent() { const n = parseFloat(cVal); if (!isNaN(n)) cVal = cFmt(n / 100) }
+function cBackspace() {
+  if (cFresh || cVal === 'Error') return
+  cVal = cVal.length > 1 ? cVal.slice(0, -1) : '0'
+}
+function cFmt(n) {
+  if (typeof n !== 'number') return String(n)
+  const s = parseFloat(n.toFixed(10)).toString()
+  return s.length > 12 ? parseFloat(n.toPrecision(8)).toString() : s
+}
+function cRefresh() {
+  document.getElementById('calc-val').textContent = cVal
+  document.querySelectorAll('.cb.op').forEach(b =>
+    b.classList.toggle('op-active', b.dataset.op === cOp && cFresh))
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+async function loadHotkeyDisplay() {
+  const hk = await ipcRenderer.invoke('get-hotkey')
+  document.getElementById('hotkey-input').value = hk
+}
+
+function openSettings() {
+  loadHotkeyDisplay()
+  document.getElementById('settings-modal').classList.remove('hidden')
+  ipcRenderer.invoke('set-interacting', true)
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.add('hidden')
+  ipcRenderer.invoke('resume-hotkey')
+  ipcRenderer.invoke('set-interacting', false)
+}
+
+function bindHotkeyInput() {
+  const input = document.getElementById('hotkey-input')
+
+  input.addEventListener('focus', () => {
+    input.classList.add('listening')
+    input.value = 'Press a key...'
+    ipcRenderer.invoke('pause-hotkey')  // stop F9 etc. from triggering while typing
+  })
+
+  input.addEventListener('blur', () => {
+    input.classList.remove('listening')
+  })
+
+  input.addEventListener('keydown', e => {
+    e.preventDefault()
+    const parts = []
+    if (e.ctrlKey)  parts.push('Ctrl')
+    if (e.altKey)   parts.push('Alt')
+    if (e.shiftKey) parts.push('Shift')
+    const k = e.key
+    if (!['Control', 'Alt', 'Shift', 'Meta'].includes(k)) {
+      parts.push(k.length === 1 ? k.toUpperCase() : k)
+    }
+    if (parts.length) input.value = parts.join('+')
+  })
 }
 
 async function editFromViewer() {
@@ -393,6 +517,18 @@ function bindUI() {
   // Window controls
   document.getElementById('btn-minimize').addEventListener('click', () => ipcRenderer.invoke('minimize-win'))
   document.getElementById('btn-close').addEventListener('click', () => window.close())
+
+  // Settings
+  document.getElementById('btn-settings').addEventListener('click', openSettings)
+  document.getElementById('btn-close-settings').addEventListener('click', closeSettings)
+  document.getElementById('btn-apply-hotkey').addEventListener('click', async () => {
+    const val = document.getElementById('hotkey-input').value.trim()
+    if (val && val !== 'Press a key...') {
+      await ipcRenderer.invoke('set-hotkey', val)
+    }
+    closeSettings()
+  })
+  bindHotkeyInput()
 }
 
 function switchTab(tab) {
@@ -424,6 +560,20 @@ function bindKeys() {
     if (ctrl && e.shiftKey && e.key === 'S') { e.preventDefault(); captureScreen(); return }
     if (ctrl && e.key === 'n' && !noteOpen && !editorOpen) {
       e.preventDefault(); switchTab('notes'); openNoteModal(null)
+    }
+
+    // Calculator keyboard support when calc is open and no modal active
+    if (cOpen && !noteOpen && !editorOpen && !viewerOpen &&
+        !document.getElementById('settings-modal').classList.contains('hidden') === false) {
+      const k = e.key
+      if (k >= '0' && k <= '9')  { cDigit(k); cRefresh(); return }
+      if (k === '.')              { cDot(); cRefresh(); return }
+      if (k === '+')              { cOperator('+'); cRefresh(); return }
+      if (k === '-' && !ctrl)     { cOperator('-'); cRefresh(); return }
+      if (k === '*')              { cOperator('*'); cRefresh(); return }
+      if (k === '/' && !ctrl)     { e.preventDefault(); cOperator('/'); cRefresh(); return }
+      if (k === 'Enter')          { cEquals(); cRefresh(); return }
+      if (k === 'Backspace' && !noteOpen && !editorOpen) { cBackspace(); cRefresh(); return }
     }
   })
 

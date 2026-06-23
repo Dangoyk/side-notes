@@ -8,10 +8,14 @@
 </head>
 <body>
 
+  <!-- Visible strip shown when panel is hidden (left edge of window) -->
+  <div id="edge-handle">&#8250;</div>
+
   <!-- Title bar (draggable region) -->
   <div id="titlebar">
     <span id="app-title">Side Notes <span id="version">v1.0.0</span></span>
     <div id="win-controls">
+      <button id="btn-settings" title="Settings">&#9881;</button>
       <button id="btn-minimize" title="Minimize">&#8212;</button>
       <button id="btn-close" title="Close">&#x2715;</button>
     </div>
@@ -39,6 +43,42 @@
       <span class="kbd-hint">Ctrl+Shift+S</span>
     </div>
     <div id="shots-list" class="scroll-area" tabindex="0"></div>
+  </div>
+
+  <!-- Calculator (sticky bottom, collapsible) -->
+  <div id="calc-panel">
+    <button id="calc-toggle-btn">Calculator <span id="calc-arrow">&#9650;</span></button>
+    <div id="calc-body" class="hidden">
+      <div id="calc-display">
+        <div id="calc-expr"></div>
+        <div id="calc-val">0</div>
+      </div>
+      <div id="calc-btns">
+        <button class="cb fn" data-action="clear">C</button>
+        <button class="cb fn" data-action="sign">+/-</button>
+        <button class="cb fn" data-action="pct">%</button>
+        <button class="cb op" data-action="op" data-op="/">&#247;</button>
+
+        <button class="cb" data-action="digit" data-digit="7">7</button>
+        <button class="cb" data-action="digit" data-digit="8">8</button>
+        <button class="cb" data-action="digit" data-digit="9">9</button>
+        <button class="cb op" data-action="op" data-op="*">&#215;</button>
+
+        <button class="cb" data-action="digit" data-digit="4">4</button>
+        <button class="cb" data-action="digit" data-digit="5">5</button>
+        <button class="cb" data-action="digit" data-digit="6">6</button>
+        <button class="cb op" data-action="op" data-op="-">&#8722;</button>
+
+        <button class="cb" data-action="digit" data-digit="1">1</button>
+        <button class="cb" data-action="digit" data-digit="2">2</button>
+        <button class="cb" data-action="digit" data-digit="3">3</button>
+        <button class="cb op" data-action="op" data-op="+">+</button>
+
+        <button class="cb wide" data-action="digit" data-digit="0">0</button>
+        <button class="cb" data-action="dot">.</button>
+        <button class="cb eq" data-action="equals">=</button>
+      </div>
+    </div>
   </div>
 
   <!-- Note editor modal -->
@@ -83,6 +123,22 @@
     </div>
     <div id="viewer-wrap">
       <img id="viewer-img" src="" alt="screenshot">
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="note-modal-bar">
+      <span style="font-weight:600;font-size:13px;">Settings</span>
+      <button id="btn-close-settings" class="btn-ghost">&#x2715;</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-row">
+        <span class="settings-label">Toggle hotkey</span>
+        <input id="hotkey-input" type="text" readonly placeholder="Click, then press a key...">
+        <span class="settings-hint">Press any key or combo: F9, Alt+K, Ctrl+Space, etc.<br>This toggles the panel from anywhere, even inside Roblox.</span>
+      </div>
+      <button id="btn-apply-hotkey" class="btn-accent">Apply</button>
     </div>
   </div>
 
