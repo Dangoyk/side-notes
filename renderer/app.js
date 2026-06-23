@@ -19,6 +19,7 @@ let currentSize = 3
 let history = []
 let originalImageData = null
 let editingShotId = null
+let cropRect = null   // { x, y, w, h } in bitmap coords while crop tool active
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -120,22 +121,53 @@ function renderShots() {
     el.innerHTML = '<div class="empty">No screenshots yet.<br>Click <b>Capture</b> to grab one.</div>'
     return
   }
-  el.innerHTML = [...shots].reverse().map(s => `
-    <div class="shot-card" data-id="${s.id}" tabindex="0" role="button">
+  // Favorites first, then newest-first within each group
+  const sorted = [...shots].sort((a, b) => {
+    if (a.favorited && !b.favorited) return -1
+    if (!a.favorited && b.favorited) return 1
+    return b.created - a.created
+  })
+  el.innerHTML = sorted.map(s => `
+    <div class="shot-card${s.favorited ? ' favorited' : ''}" data-id="${s.id}" tabindex="0" role="button">
       <img src="${s.thumb}" alt="screenshot" loading="lazy">
       <div class="shot-card-info">
         <span class="shot-card-date">${fmtDate(s.created)}</span>
-        <button class="shot-del-btn" data-id="${s.id}" title="Delete">&#x2715;</button>
+        <div class="shot-card-actions">
+          <button class="shot-fav-btn${s.favorited ? ' fav-active' : ''}" data-id="${s.id}" title="${s.favorited ? 'Unfavorite' : 'Favorite'}">&#9733;</button>
+          <button class="shot-del-btn" data-id="${s.id}" title="Delete">&#x2715;</button>
+        </div>
       </div>
     </div>`).join('')
 
   el.querySelectorAll('.shot-card').forEach(c => {
-    c.addEventListener('click', e => { if (!e.target.classList.contains('shot-del-btn')) openViewer(c.dataset.id) })
-    c.addEventListener('keydown', e => { if (e.key === 'Enter') openViewer(c.dataset.id) })
+    c.addEventListener('click', e => {
+      if (e.target.classList.contains('shot-del-btn') || e.target.classList.contains('shot-fav-btn')) return
+      openEditor_fromShot(c.dataset.id)
+    })
+    c.addEventListener('keydown', e => { if (e.key === 'Enter') openEditor_fromShot(c.dataset.id) })
+  })
+  el.querySelectorAll('.shot-fav-btn').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); toggleFavorite(b.dataset.id) })
   })
   el.querySelectorAll('.shot-del-btn').forEach(b => {
     b.addEventListener('click', e => { e.stopPropagation(); deleteShot(b.dataset.id) })
   })
+}
+
+async function toggleFavorite(id) {
+  const s = shots.find(x => x.id === id)
+  if (!s) return
+  s.favorited = !s.favorited
+  await saveData()
+  renderShots()
+}
+
+async function openEditor_fromShot(id) {
+  const s = shots.find(x => x.id === id)
+  if (!s) return
+  editingShotId = id
+  const data = await ipcRenderer.invoke('read-image', s.filePath)
+  if (data) openEditor(data, id)
 }
 
 async function captureScreen() {
@@ -156,11 +188,14 @@ async function deleteShot(id) {
 }
 
 // ── Screenshot editor ──────────────────────────────────────────────────────
-function openEditor(dataUrl, shotId) {
+async function openEditor(dataUrl, shotId) {
   editingShotId = shotId
   history = []
   originalImageData = null
+  cropRect = null
 
+  await ipcRenderer.invoke('expand-for-editor')
+  document.body.classList.add('editor-open')
   document.getElementById('editor-modal').classList.remove('hidden')
   ipcRenderer.invoke('set-interacting', true)
 
@@ -170,9 +205,19 @@ function openEditor(dataUrl, shotId) {
     editorCanvas.height = img.naturalHeight
     editorCtx.drawImage(img, 0, 0)
     originalImageData = editorCtx.getImageData(0, 0, editorCanvas.width, editorCanvas.height)
+    scaleCanvasToFit()
     pushHistory()
   }
   img.src = dataUrl
+}
+
+function scaleCanvasToFit() {
+  const wrap = document.getElementById('canvas-wrap')
+  const maxW  = wrap.clientWidth  - 24
+  const maxH  = wrap.clientHeight - 24
+  const scale = Math.min(1, maxW / editorCanvas.width, maxH / editorCanvas.height)
+  editorCanvas.style.width  = Math.round(editorCanvas.width  * scale) + 'px'
+  editorCanvas.style.height = Math.round(editorCanvas.height * scale) + 'px'
 }
 
 function bindEditorCanvas() {
@@ -192,7 +237,7 @@ function bindEditorCanvas() {
       editorCtx.beginPath()
       editorCtx.moveTo(p.x, p.y)
     }
-    if (currentTool === 'rect' || currentTool === 'arrow') {
+    if (currentTool === 'rect' || currentTool === 'arrow' || currentTool === 'crop') {
       shape = { x: p.x, y: p.y }
     }
   })
@@ -225,11 +270,22 @@ function bindEditorCanvas() {
     } else if (currentTool === 'arrow' && shape) {
       restoreTop()
       drawArrow(shape.x, shape.y, p.x, p.y)
+    } else if (currentTool === 'crop' && shape) {
+      cropRect = { x: shape.x, y: shape.y, w: p.x - shape.x, h: p.y - shape.y }
+      restoreTop()
+      drawCropOverlay(cropRect)
     }
   })
 
   editorCanvas.addEventListener('mouseup', () => {
-    if (isDrawing) { pushHistory(); isDrawing = false; shape = null }
+    if (!isDrawing) return
+    if (currentTool === 'crop') {
+      isDrawing = false; shape = null
+      document.getElementById('btn-apply-crop').style.display =
+        cropRect && Math.abs(cropRect.w) > 4 && Math.abs(cropRect.h) > 4 ? '' : 'none'
+    } else {
+      pushHistory(); isDrawing = false; shape = null
+    }
   })
   editorCanvas.addEventListener('mouseleave', () => {
     if (isDrawing && (currentTool === 'pen' || currentTool === 'eraser')) {
@@ -254,6 +310,53 @@ function drawArrow(x1, y1, x2, y2) {
   editorCtx.lineTo(x2 - len * Math.cos(angle + Math.PI / 6), y2 - len * Math.sin(angle + Math.PI / 6))
   editorCtx.closePath()
   editorCtx.fill()
+}
+
+function drawCropOverlay({ x, y, w, h }) {
+  const ctx = editorCtx
+  const cw = editorCanvas.width, ch = editorCanvas.height
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(0, 0, cw, ch)
+  // cut out the selection
+  const sx = w >= 0 ? x : x + w, sy = h >= 0 ? y : y + h
+  const sw = Math.abs(w),        sh = Math.abs(h)
+  ctx.clearRect(sx, sy, sw, sh)
+  // dashed border around selection
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 2
+  ctx.setLineDash([8, 4])
+  ctx.strokeRect(sx, sy, sw, sh)
+  ctx.setLineDash([])
+  ctx.restore()
+}
+
+function applyCrop() {
+  if (!cropRect) return
+  let { x, y, w, h } = cropRect
+  if (w < 0) { x += w; w = -w }
+  if (h < 0) { y += h; h = -h }
+  if (w < 2 || h < 2) return
+
+  // Draw from the last clean history frame (without the overlay)
+  const tmp = document.createElement('canvas')
+  tmp.width = editorCanvas.width; tmp.height = editorCanvas.height
+  tmp.getContext('2d').putImageData(history[history.length - 1], 0, 0)
+
+  editorCanvas.width  = Math.round(w)
+  editorCanvas.height = Math.round(h)
+  editorCtx.drawImage(tmp, x, y, w, h, 0, 0, w, h)
+
+  originalImageData = editorCtx.getImageData(0, 0, editorCanvas.width, editorCanvas.height)
+  history = []
+  pushHistory()
+  cropRect = null
+  document.getElementById('btn-apply-crop').style.display = 'none'
+
+  // Switch back to pen
+  currentTool = 'pen'
+  document.querySelectorAll('.tool').forEach(b => b.classList.toggle('active', b.dataset.tool === 'pen'))
+  scaleCanvasToFit()
 }
 
 function showTextInput(x, y) {
@@ -285,8 +388,10 @@ function showTextInput(x, y) {
 }
 
 function canvasPos(e) {
-  const r = editorCanvas.getBoundingClientRect()
-  return { x: e.clientX - r.left, y: e.clientY - r.top }
+  const r  = editorCanvas.getBoundingClientRect()
+  const sx = editorCanvas.width  / r.width
+  const sy = editorCanvas.height / r.height
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy }
 }
 
 function pushHistory() {
@@ -330,8 +435,13 @@ async function saveShot() {
 
 function closeEditor() {
   document.getElementById('editor-modal').classList.add('hidden')
-  history = []; originalImageData = null; editingShotId = null
+  document.body.classList.remove('editor-open')
+  editorCanvas.style.width = ''
+  editorCanvas.style.height = ''
+  history = []; originalImageData = null; editingShotId = null; cropRect = null
+  document.getElementById('btn-apply-crop').style.display = 'none'
   ipcRenderer.invoke('set-interacting', false)
+  ipcRenderer.invoke('collapse-from-editor')
 }
 
 // ── Viewer ─────────────────────────────────────────────────────────────────
@@ -507,6 +617,7 @@ function bindUI() {
   document.getElementById('color-picker').addEventListener('input', e => { currentColor = e.target.value })
   document.getElementById('size-slider').addEventListener('input',  e => { currentSize  = +e.target.value })
   document.getElementById('btn-undo').addEventListener('click', undo)
+  document.getElementById('btn-apply-crop').addEventListener('click', applyCrop)
   document.getElementById('btn-save-ss').addEventListener('click', saveShot)
   document.getElementById('btn-cancel-editor').addEventListener('click', closeEditor)
 

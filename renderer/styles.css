@@ -556,3 +556,47 @@ body.panel-closed #edge-handle { display: flex; }
 .cb.eq:hover { background: var(--green-hov); }
 
 .cb.wide { grid-column: span 2; text-align: left; padding-left: 16px; }
+
+/* ── Full-screen editor overlay ────────────────────── */
+body.editor-open #editor-modal {
+  background: rgba(5, 5, 15, 0.88);  /* slightly transparent so game shows through */
+}
+body.editor-open #canvas-wrap {
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+body.editor-open #editor-canvas {
+  box-shadow: 0 0 40px rgba(0,0,0,.8);
+  border-radius: 2px;
+}
+
+/* ── Screenshot card actions (always visible) ───────── */
+.shot-card-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+}
+.shot-card-actions {
+  display: flex;
+  gap: 4px;
+}
+.shot-fav-btn {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 14px;
+  width: 22px; height: 22px;
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .1s, background .1s;
+}
+.shot-fav-btn:hover          { color: #f5c518; background: rgba(245,197,24,.1); }
+.shot-fav-btn.fav-active     { color: #f5c518; }
+.shot-del-btn                { opacity: 1 !important; }  /* always visible */
+
+/* Favorited card gets a subtle gold top-border */
+.shot-card.favorited { border-color: rgba(245,197,24,.4); }
+.shot-card.favorited .shot-fav-btn { color: #f5c518; }

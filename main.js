@@ -226,6 +226,20 @@ ipcMain.handle('pause-hotkey',  () => globalShortcut.unregisterAll())
 ipcMain.handle('resume-hotkey', () => registerHotkey(hotkey))
 
 ipcMain.handle('set-interacting', (_, val) => { isInteracting = val })
+
+let priorBounds = null
+
+ipcMain.handle('expand-for-editor', () => {
+  priorBounds = win.getBounds()
+  win.setIgnoreMouseEvents(false)
+  win.setBounds({ x: 0, y: 0, width: screenW, height: screenH })
+})
+
+ipcMain.handle('collapse-from-editor', () => {
+  win.setBounds(priorBounds || { x: screenW - PANEL_W, y: 0, width: PANEL_W, height: screenH })
+  priorBounds = null
+})
+
 ipcMain.handle('minimize-win', () => win.minimize())
 
 ipcMain.handle('read-json', (_, filePath) => {
