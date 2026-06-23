@@ -18,8 +18,9 @@ let hotkey        = 'F9'
 
 app.whenReady().then(() => {
   const display = screen.getPrimaryDisplay()
-  screenW = display.bounds.width   // physical screen edge, not work area
-  screenH = display.bounds.height
+  const wa = display.workArea
+  screenW = wa.x + wa.width    // right edge of work area (won't fight the taskbar)
+  screenH = wa.height
 
   loadConfig()
 
@@ -31,11 +32,9 @@ app.whenReady().then(() => {
     alwaysOnTop: true,
     frame: false,
     show: false,
-    transparent: true,        // lets background disappear when panel is hidden
-    resizable: true,
+    transparent: true,
+    resizable: false,
     fullscreenable: false,
-    minWidth: 240,
-    maxWidth: 500,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -232,7 +231,9 @@ let priorBounds = null
 ipcMain.handle('expand-for-editor', () => {
   priorBounds = win.getBounds()
   win.setIgnoreMouseEvents(false)
-  win.setBounds({ x: 0, y: 0, width: screenW, height: screenH })
+  // Use full physical screen bounds — ignore work area for the editor overlay
+  const fb = screen.getPrimaryDisplay().bounds
+  win.setBounds({ x: fb.x, y: fb.y, width: fb.width, height: fb.height })
 })
 
 ipcMain.handle('collapse-from-editor', () => {

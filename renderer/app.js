@@ -173,10 +173,34 @@ async function openEditor_fromShot(id) {
 async function captureScreen() {
   try {
     const dataUrl = await ipcRenderer.invoke('capture-screen')
-    if (dataUrl) openEditor(dataUrl, null)
+    if (!dataUrl) return
+    // Save directly — no editor. User can click the card to edit later.
+    const id   = uid()
+    const file = path.join(appPaths.screenshots, `shot_${id}.png`)
+    await ipcRenderer.invoke('save-image', file, dataUrl)
+
+    const img = await loadImage(dataUrl)
+    const th  = document.createElement('canvas')
+    th.width  = 300
+    th.height = Math.round(img.naturalHeight * 300 / img.naturalWidth)
+    th.getContext('2d').drawImage(img, 0, 0, th.width, th.height)
+
+    shots.push({ id, filePath: file, thumb: th.toDataURL('image/jpeg', 0.72), created: Date.now() })
+    await saveData()
+    renderShots()
+    switchTab('shots')
   } catch (err) {
     console.error('Capture failed:', err)
   }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload  = () => resolve(img)
+    img.onerror = reject
+    img.src     = src
+  })
 }
 
 async function deleteShot(id) {
